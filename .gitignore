@@ -8,3 +8,8 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Signaturschluessel - NIEMALS committen/pushen (geheim!)
+*.keystore
+*.jks
+keystore.properties

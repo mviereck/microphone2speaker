@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="about">About</string>
-    <string name="app_name">Microfone</string>
+    <string name="app_name">Microphone2Speaker</string>
     <string name="mic_active">O microfone está ativo</string>
     <string name="cancel_mic">Clique para cancelar</string>
     <string name="app_grant_the_permissions">Este aplicativo requer permissão para gravar áudio e enviar notificações. Conceda as permissões.</string>

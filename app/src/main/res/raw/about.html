@@ -1,37 +1,55 @@
 <html>
     <body>
 
-        <h2>Microphone</h2>
-        <p>This microphone simply sends your voice out of the phone, causing a horrible screeching
-            feedback noise WHICH POPS YOUR SPEAKER!
-            But wait, that's not all! If you have a male-to-male
-            <a href="http://www.amazon.co.uk/gp/offer-listing/B001NXQR0K?ie=UTF8&tag=bitplanenet-21&linkCode=am2&camp=1634&creative=6738&creativeASIN=B001NXQR0K">
-                3.5mm headphone jack
-            </a>
-            you can plug your phone into your computer,
-            PA system or whatever and use your Android device as a real microphone.
+        <h2>Microphone2Speaker</h2>
+
+        <p><b>This is a fork.</b> Microphone2Speaker is a modified version of the
+            original &ldquo;Microphone&rdquo; app by Gaz Davidson
+            (<a href="mailto:gaz@bitplane.net">gaz@bitplane.net</a>).
+            The changes in this fork were made by <b>Martin Viereck</b> and are
+            <b>not</b> endorsed by or affiliated with the original author.
         </p>
 
-        <p>If you're thinking it's not a very good mic, you're right. It's currently not possible to
-            access the mic's input stream in a lag
-            free way, this might be fixed in Android 3.0 but until then this is as good as it gets.
-            No good for karaoke, but still useful for voice chat.
+        <p>The app sends the sound from your microphone straight to the phone's
+            audio output. Use headphones to avoid feedback. It is handy as a live
+            microphone monitor, a simple hearing aid, or for using your phone as a
+            microphone connected to another device.
         </p>
 
-        <p>This is an early release so it's very simple at the moment and doesn't include volume,
-            gain or anything fancy like that. It also hasn't been tested on
-            older phones. Stay tuned for updates!
+        <p><b>What is different in this fork:</b> the main goal was to reduce the
+            latency between speaking and hearing. The app now selects the device's
+            native sample rate and hardware buffer size automatically, uses a
+            low-latency audio path, and adapts to different phones. On Bluetooth
+            headphones a noticeable delay remains &mdash; that part is caused by
+            Bluetooth itself and cannot be removed by the app.
         </p>
 
-        <p>Send bug reports, feature suggestions and complaints to<a href="mailto:gaz@bitplane.net">
-            gaz@bitplane.net</a>.
-        </p>
-
-        <p>If you read this far then you must be bored, why not check out
-            <a href="http://bitplane.net/projects/android">my other apps</a>.
+        <p>The original app and its history remain credited below. For the original
+            app see <a href="http://bitplane.net/projects/android">bitplane.net</a>.
         </p>
 
         <h2>Changes:</h2>
+        <br />
+
+        <u>2.0 (fork by Martin Viereck)</u>
+        <ul>
+            <li>Forked as &ldquo;Microphone2Speaker&rdquo; with its own app id, so it
+                installs alongside the original app.
+            </li>
+            <li>Greatly reduced audio latency: uses the device's native sample rate
+                (no resampling), a low-latency playback path and hardware-sized
+                buffers.
+            </li>
+            <li>Automatic self-tuning of sample rate and buffer size for different
+                devices, with safe fallbacks.
+            </li>
+            <li>New app icon (microphone with sound waves) and a version/build stamp
+                on the main screen.
+            </li>
+        </ul>
+        <br />
+        <p><i>The entries below are from the original &ldquo;Microphone&rdquo; app by
+            Gaz Davidson.</i></p>
         <br />
 
         <u>0.9</u>

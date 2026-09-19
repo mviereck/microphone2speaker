@@ -24,17 +24,30 @@ import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.net.toUri
-import java.nio.ByteBuffer
 
 class MicrophoneService : Service(), SharedPreferences.OnSharedPreferenceChangeListener {
-    private val mSampleRate = 44100
+    // Native Sample-Rate des Geräts (per Messung ermittelt: 16000 Hz auf dem
+    // Test-Gerät). Trifft man die native Rate, entfällt der Resampler ->
+    // deutlich geringere Latenz. Für Sprach-Monitoring ist 16 kHz ausreichend.
+    // Wird in onCreate ggf. auf den tatsächlichen Gerätewert gesetzt.
+    private var mSampleRate = 16000
     private val mFormat = AudioFormat.ENCODING_PCM_16BIT
+
+    // Mono für Ein- und Ausgabe: halbiert die Datenmenge pro Puffer.
+    // (Der frühere Lautstärke-Einbruch kam von der Eingangsquelle
+    // VOICE_PERFORMANCE, nicht von Mono – wir nutzen jetzt MIC.)
+    private val mInChannelConfig = AudioFormat.CHANNEL_IN_MONO
+    private val mOutChannelConfig = AudioFormat.CHANNEL_OUT_MONO
+
     private var mActive = false
 
     private lateinit var mSharedPreferences: SharedPreferences
     private var mAudioOutput: AudioTrack? = null
     private var mAudioInput: AudioRecord? = null
     private var mInBufferSize = 0
+    // Native Hardware-Puffergröße in Frames (aus AudioManager); bestimmt die
+    // ideale Chunk-Größe für minimale Latenz ohne Aussetzer.
+    private var mNativeFramesPerBuffer = 0
     private lateinit var mNotificationManager: NotificationManagerCompat
     private lateinit var mBroadcastReceiver: MicrophoneReceiver
 
@@ -49,32 +62,67 @@ class MicrophoneService : Service(), SharedPreferences.OnSharedPreferenceChangeL
         mNotificationManager = NotificationManagerCompat.from(applicationContext)
         mBroadcastReceiver = MicrophoneReceiver()
 
-        // create input and output streams
-        mInBufferSize = AudioRecord.getMinBufferSize(
-            mSampleRate,
-            AudioFormat.CHANNEL_IN_STEREO,
-            mFormat
+        // --- Selbstoptimierung: Audio-Parameter des jeweiligen Geräts ermitteln ---
+        // Ziel: auf jedem Handy automatisch die native Sample-Rate und Hardware-
+        // Puffergröße treffen (kein Resampler, minimale Latenz), mit robusten
+        // Fallbacks, falls ein Gerät die Werte nicht meldet.
+        val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        mSampleRate = pickSampleRate(am)
+        mNativeFramesPerBuffer =
+            am.getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER)?.toIntOrNull() ?: 0
+        if (BuildConfig.DEBUG) {
+            Log.d(
+                AppPreferences.APP_TAG,
+                "Audio-Setup: SampleRate=$mSampleRate, FramesPerBuffer=$mNativeFramesPerBuffer"
+            )
+        }
+
+        // create input and output streams. getMinBufferSize kann bei ungültiger
+        // Konfiguration einen Fehler (negativ) liefern -> auf einen sicheren Wert
+        // aus der nativen Puffergröße ausweichen.
+        mInBufferSize = safeMinBufferSize(
+            AudioRecord.getMinBufferSize(mSampleRate, mInChannelConfig, mFormat)
         )
-        val mOutBufferSize = AudioTrack.getMinBufferSize(
-            mSampleRate,
-            AudioFormat.CHANNEL_OUT_STEREO,
-            mFormat
+        val mOutBufferSize = safeMinBufferSize(
+            AudioTrack.getMinBufferSize(mSampleRate, mOutChannelConfig, mFormat)
         )
         if (ActivityCompat.checkSelfPermission(
                 this,
                 Manifest.permission.RECORD_AUDIO
             ) == PackageManager.PERMISSION_GRANTED
         ) {
-            mAudioInput = AudioRecord(
-                MediaRecorder.AudioSource.MIC,
-                mSampleRate,
-                AudioFormat.CHANNEL_IN_STEREO,
-                mFormat,
-                mInBufferSize
-            )
+            // Test: VOICE_RECOGNITION umgeht die Signalverarbeitung (wie
+            // VOICE_PERFORMANCE), ist aber normalerweise nicht leise -> evtl.
+            // etwas geringere Eingangslatenz bei gleichem Pegel wie MIC.
+            val audioSource = MediaRecorder.AudioSource.VOICE_RECOGNITION
+
+            val audioFormat = AudioFormat.Builder()
+                .setEncoding(mFormat)
+                .setChannelMask(mInChannelConfig)
+                .setSampleRate(mSampleRate)
+                .build()
+
+            mAudioInput = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                // Ab Android 11: Aufnahme über den Low-Latency-Pfad anfordern.
+                AudioRecord.Builder()
+                    .setAudioSource(audioSource)
+                    .setAudioFormat(audioFormat)
+                    .setBufferSizeInBytes(mInBufferSize)
+                    .build()
+            } else {
+                AudioRecord(
+                    audioSource,
+                    mSampleRate,
+                    mInChannelConfig,
+                    mFormat,
+                    mInBufferSize
+                )
+            }
         }
-        mAudioOutput = AudioTrack.Builder()
+        val audioTrackBuilder = AudioTrack.Builder()
             .setAudioAttributes(
+                // CONTENT_TYPE_MUSIC bleibt (laut). Nur SONIFICATION war leise;
+                // der Low-Latency-Pfad selbst (unten per PerformanceMode) ist es nicht.
                 AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_MEDIA)
                     .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
@@ -83,13 +131,29 @@ class MicrophoneService : Service(), SharedPreferences.OnSharedPreferenceChangeL
             .setAudioFormat(
                 AudioFormat.Builder()
                     .setEncoding(mFormat)
-                    .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
+                    .setChannelMask(mOutChannelConfig)
                     .setSampleRate(mSampleRate)
                     .build()
             )
-            .setBufferSizeInBytes(mOutBufferSize)
+            // Ausgabepuffer an der nativen Hardware-Blockgröße ausrichten. Das
+            // System deckelt ohnehin auf seine Untergrenze (auf dem Test-Gerät
+            // 640 Frames / ~40 ms) – kleinere Anfragen bringen nichts, größere
+            // erhöhen nur die Latenz. Faktor 2 als kleine Reserve gegen Aussetzer.
+            .setBufferSizeInBytes(
+                if (mNativeFramesPerBuffer > 0)
+                    (mNativeFramesPerBuffer * BYTES_PER_FRAME * 2).coerceAtLeast(512)
+                else
+                    (mOutBufferSize / 8).coerceAtLeast(512)
+            )
             .setTransferMode(AudioTrack.MODE_STREAM)
-            .build()
+
+        // Low-Latency-Wiedergabepfad (ab Android 8) anfordern – mit dem lauten
+        // CONTENT_TYPE_MUSIC, nicht mit dem leisen SONIFICATION von vorhin.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            audioTrackBuilder.setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
+        }
+
+        mAudioOutput = audioTrackBuilder.build()
 
         // listen for preference changes
         mSharedPreferences = AppPreferences.prefs(this)
@@ -97,6 +161,44 @@ class MicrophoneService : Service(), SharedPreferences.OnSharedPreferenceChangeL
         mActive = AppPreferences.isActive(mSharedPreferences)
 
         if (mActive) record()
+    }
+
+    /**
+     * Wählt die Sample-Rate für minimale Latenz: bevorzugt die native Rate des
+     * Geräts (dann entfällt der Resampler). Prüft, ob Ein- und Ausgabe die Rate
+     * tatsächlich unterstützen; sonst wird eine gängige Rate aus einer Fallback-
+     * Kette genommen. So funktioniert die App auf beliebigen Geräten.
+     */
+    private fun pickSampleRate(am: AudioManager): Int {
+        val native = am.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)?.toIntOrNull()
+        val candidates = buildList {
+            if (native != null) add(native)
+            // Fallback-Kette gängiger Raten, falls die native Rate fehlt/ungültig ist.
+            addAll(listOf(48000, 44100, 16000, 22050, 8000))
+        }
+        for (rate in candidates) {
+            if (isSampleRateSupported(rate)) return rate
+        }
+        return 44100 // letzter, praktisch immer unterstützter Notnagel
+    }
+
+    /** Prüft, ob eine Sample-Rate für Aufnahme und Wiedergabe brauchbar ist. */
+    private fun isSampleRateSupported(rate: Int): Boolean {
+        if (rate <= 0) return false
+        val inMin = AudioRecord.getMinBufferSize(rate, mInChannelConfig, mFormat)
+        val outMin = AudioTrack.getMinBufferSize(rate, mOutChannelConfig, mFormat)
+        return inMin > 0 && outMin > 0
+    }
+
+    /**
+     * Liefert eine gültige Puffergröße. getMinBufferSize kann ERROR (-1) oder
+     * ERROR_BAD_VALUE (-2) zurückgeben; dann aus der nativen Puffergröße einen
+     * sicheren Ersatz bilden statt abzustürzen.
+     */
+    private fun safeMinBufferSize(reported: Int): Int {
+        if (reported > 0) return reported
+        val frames = if (mNativeFramesPerBuffer > 0) mNativeFramesPerBuffer else 1024
+        return frames * BYTES_PER_FRAME * 4
     }
 
     override fun onDestroy() {
@@ -208,18 +310,47 @@ class MicrophoneService : Service(), SharedPreferences.OnSharedPreferenceChangeL
                     return
                 }
 
-                val directBuffer = ByteBuffer.allocateDirect(mInBufferSize)
-                val byteArray = ByteArray(mInBufferSize)
+                // Chunk-Größe an der nativen Hardware-Puffergröße ausrichten:
+                // FramesPerBuffer * Bytes/Frame. Das ist die Blockgröße, in der die
+                // Hardware ohnehin arbeitet -> minimale Latenz ohne Aussetzer.
+                // Fallback auf 1/8 des Min-Puffers, wenn die native Größe unbekannt.
+                val chunkSize = if (mNativeFramesPerBuffer > 0) {
+                    (mNativeFramesPerBuffer * BYTES_PER_FRAME).coerceAtLeast(256)
+                } else {
+                    (mInBufferSize / 8).coerceAtLeast(256)
+                }
+                val byteArray = ByteArray(chunkSize)
+                if (BuildConfig.DEBUG) {
+                    Log.d(
+                        AppPreferences.APP_TAG,
+                        "LATENZ-MESSUNG: chunkSize=$chunkSize bytes " +
+                            "(nativeFramesPerBuffer=$mNativeFramesPerBuffer), mInBufferSize=$mInBufferSize"
+                    )
+                }
 
                 try {
+                    // Wiedergabe auf volle Lautstärke setzen. Der Low-Latency-Pfad
+                    // verwendet sonst nicht zwingend den vollen Pegel.
+                    audioOutput.setVolume(AudioTrack.getMaxVolume())
                     audioOutput.play()
                     audioInput.startRecording()
 
+                    // Diagnose: tatsächlich vom System vergebene Ausgabepuffergröße.
+                    if (BuildConfig.DEBUG) {
+                        val realOutFrames = audioOutput.bufferSizeInFrames
+                        val realOutMs = realOutFrames * 1000 / mSampleRate
+                        Log.d(
+                            AppPreferences.APP_TAG,
+                            "LATENZ-MESSUNG: AudioTrack-Puffer=$realOutFrames frames (~${realOutMs} ms), " +
+                                "chunkSize=$chunkSize bytes"
+                        )
+                    }
+
                     while (mActive) {
-                        val read = audioInput.read(directBuffer, mInBufferSize)
-                        directBuffer[byteArray]
-                        directBuffer.rewind()
-                        audioOutput.write(byteArray, 0, read)
+                        val read = audioInput.read(byteArray, 0, chunkSize)
+                        if (read > 0) {
+                            audioOutput.write(byteArray, 0, read)
+                        }
                     }
 
                     Log.d(AppPreferences.APP_TAG, "Finished recording")
@@ -269,5 +400,9 @@ class MicrophoneService : Service(), SharedPreferences.OnSharedPreferenceChangeL
     companion object {
         private const val ACTION_STOP = "net.bitplane.android.microphone.STOP"
         private const val CHANNEL_ID = "microphone_channel_id"
+
+        // Mono, 16 bit PCM = 2 Bytes pro Frame. Zentral, damit Puffer-/Chunk-
+        // Berechnungen konsistent bleiben, falls sich das Format ändert.
+        private const val BYTES_PER_FRAME = 2
     }
 }

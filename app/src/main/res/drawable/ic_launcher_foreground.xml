@@ -4,12 +4,42 @@
     android:viewportWidth="24"
     android:viewportHeight="24"
     android:tint="#000000">
-  <group android:scaleX="0.58"
-      android:scaleY="0.58"
-      android:translateX="5.04"
-      android:translateY="5.04">
+  <group android:scaleX="0.46"
+      android:scaleY="0.46"
+      android:translateX="4.6"
+      android:translateY="6.2">
+    <!-- Mikrofon: eigene Untergruppe, etwas groesser (um Zentrum 12,12) und
+         leicht nach links gerueckt; Schallwellen bleiben davon unberuehrt. -->
+    <group android:pivotX="12"
+        android:pivotY="12"
+        android:scaleX="1.15"
+        android:scaleY="1.15"
+        android:translateX="-1.8">
+      <path
+          android:fillColor="@android:color/white"
+          android:pathData="M12,14c1.66,0 2.99,-1.34 2.99,-3L15,5c0,-1.66 -1.34,-3 -3,-3S9,3.34 9,5v6c0,1.66 1.34,3 3,3zM17.3,11c0,3 -2.54,5.1 -5.3,5.1S6.7,14 6.7,11L5,11c0,3.41 2.72,6.23 6,6.72L11,21h2v-3.28c3.28,-0.48 6,-3.3 6,-6.72h-1.7z"/>
+    </group>
+    <!-- Drei groesser werdende Schallwellen ))) rechts vom Mikrofon -->
+    <!-- kleinster Bogen -->
     <path
-        android:fillColor="@android:color/white"
-        android:pathData="M12,14c1.66,0 2.99,-1.34 2.99,-3L15,5c0,-1.66 -1.34,-3 -3,-3S9,3.34 9,5v6c0,1.66 1.34,3 3,3zM17.3,11c0,3 -2.54,5.1 -5.3,5.1S6.7,14 6.7,11L5,11c0,3.41 2.72,6.23 6,6.72L11,21h2v-3.28c3.28,-0.48 6,-3.3 6,-6.72h-1.7z"/>
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.5"
+        android:fillColor="#00000000"
+        android:strokeLineCap="round"
+        android:pathData="M22,8 Q24.5,11 22,14"/>
+    <!-- mittlerer Bogen -->
+    <path
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.5"
+        android:fillColor="#00000000"
+        android:strokeLineCap="round"
+        android:pathData="M25,5.5 Q29,11 25,16.5"/>
+    <!-- groesster Bogen -->
+    <path
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.5"
+        android:fillColor="#00000000"
+        android:strokeLineCap="round"
+        android:pathData="M28,3 Q33.5,11 28,19"/>
   </group>
 </vector>

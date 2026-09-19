@@ -1,4 +1,16 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.Properties
+
+// Signierdaten aus local.properties lesen (nicht im Repo, gitignored).
+val signingProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+val hasSigning = signingProps.getProperty("storePassword")?.isNotBlank() == true &&
+    rootProject.file(signingProps.getProperty("storeFile", "release.keystore")).exists()
 
 plugins {
     alias(libs.plugins.android.application)
@@ -11,11 +23,31 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "net.bitplane.android.microphone"
+        // Eigene applicationId, damit diese App parallel zur Original-App
+        // installiert werden kann und sie nicht überschreibt.
+        applicationId = "net.bitplane.android.microphone2speaker"
         minSdk = 23
         targetSdk = 36
-        versionCode = 9
-        versionName = "0.9"
+        // Eigene Versionierung, klar abgesetzt vom Original (dort 9 / "0.9").
+        versionCode = 100
+        versionName = "2.0"
+
+        // Build-Zeitstempel, damit in der App sichtbar ist, welcher Build läuft.
+        val buildTime = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date())
+        buildConfigField("String", "BUILD_TIME", "\"$buildTime\"")
+    }
+
+    signingConfigs {
+        if (hasSigning) {
+            create("release") {
+                storeFile = rootProject.file(
+                    signingProps.getProperty("storeFile", "release.keystore")
+                )
+                storePassword = signingProps.getProperty("storePassword")
+                keyAlias = signingProps.getProperty("keyAlias")
+                keyPassword = signingProps.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
@@ -26,11 +58,17 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Nur signieren, wenn Keystore-Daten vorhanden sind. Sonst bleibt der
+            // Release-Build unsigniert (z. B. bei Klonen ohne Keystore).
+            if (hasSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     compileOptions {

@@ -1,5 +1,9 @@
 Android Microphone (c) 2010-2011 Gaz Davidson <gaz@bitplane.net>
 
+Microphone2Speaker is a fork of the above, with modifications
+(c) 2026 Martin Viereck. This fork is not endorsed by or affiliated with
+the original author. Distributed under the same MIT license terms below.
+
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights

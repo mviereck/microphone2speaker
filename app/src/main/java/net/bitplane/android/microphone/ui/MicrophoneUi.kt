@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.text.HtmlCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import net.bitplane.android.microphone.BuildConfig
 import net.bitplane.android.microphone.R
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -93,28 +94,39 @@ fun MicrophoneScreen(
                     MaterialTheme.colorScheme.surfaceVariant
             }
 
-            Surface(
-                modifier = Modifier
-                    .size(140.dp)
-                    .shadow(6.dp, CircleShape)
-                    .clickable(onClick = onToggle),
-                shape = CircleShape,
-                color = background
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
+                Surface(
+                    modifier = Modifier
+                        .size(140.dp)
+                        .shadow(6.dp, CircleShape)
+                        .clickable(onClick = onToggle),
+                    shape = CircleShape,
+                    color = background
                 ) {
-                    Icon(
-                        imageVector = if (active) Icons.Filled.Mic else Icons.Filled.MicOff,
-                        contentDescription = if (active) {
-                            stringResource(id = R.string.mic_active)
-                        } else {
-                            stringResource(id = R.string.cancel_mic)
-                        },
-                        modifier = Modifier.size(64.dp)
-                    )
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (active) Icons.Filled.Mic else Icons.Filled.MicOff,
+                            contentDescription = if (active) {
+                                stringResource(id = R.string.mic_active)
+                            } else {
+                                stringResource(id = R.string.cancel_mic)
+                            },
+                            modifier = Modifier.size(64.dp)
+                        )
+                    }
                 }
+
+                Text(
+                    text = "v${BuildConfig.VERSION_NAME} · Build ${BuildConfig.BUILD_TIME}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 24.dp)
+                )
             }
         }
     }

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="about">Sur</string>
-    <string name="app_name">Microphone</string>
+    <string name="app_name">Microphone2Speaker</string>
     <string name="mic_active">Microphone active</string>
     <string name="cancel_mic">Cliquez ici pour annuler</string>
     <string name="app_grant_the_permissions">Cette application nécessite l’autorisation d’enregistrer l’audio et d’envoyer des notifications. Veuillez accorder les autorisations.</string>
